@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neuroscope-ai"
+version = "0.1.0"
+description = "An AI-assisted desktop environment for reproducible neural data analysis."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = [
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "pandas>=2.1",
+  "matplotlib>=3.8",
+  "PySide6>=6.6",
+  "h5py>=3.10",
+  "pydantic>=2.6",
+]
+
+[project.optional-dependencies]
+ai = ["openai>=1.30"]
+dev = ["pytest>=8.0", "ruff>=0.4"]
+
+[project.scripts]
+neuroscope = "neuroscope.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
