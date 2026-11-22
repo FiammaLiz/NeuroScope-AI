@@ -20,8 +20,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-ai = ["openai>=1.30"]
+ai = ["openai>=1.66.0"]
 dev = ["pytest>=8.0", "ruff>=0.4"]
+literature = ["pypdf>=5.0"]
 
 [project.scripts]
 neuroscope = "neuroscope.app:main"

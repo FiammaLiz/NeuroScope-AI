@@ -1,5 +1,7 @@
-import numpy as np
 from pathlib import Path
+
+import numpy as np
+
 from neuroscope.domain import DatasetProfile
 from neuroscope.memory.project_store import ProjectStore
 
