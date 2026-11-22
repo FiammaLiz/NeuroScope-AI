@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import numpy as np
 
 
@@ -10,7 +11,7 @@ def estimate_noise_mad(signal: np.ndarray) -> float:
     return float(np.median(np.abs(x - np.median(x))) / 0.6744897501960817)
 
 
-def detect_negative_spikes(signal: np.ndarray, sampling_rate_hz: float,
+def detect_negative_spikes(signal: np.ndarray, sampling_rate_hz: float | None,
                            threshold_sd: float = -4.0, *, channel: int | None = None,
                            channel_axis: int | None = None) -> dict:
     """Minimal threshold detector for extracellular negative-going events.
@@ -29,8 +30,10 @@ def detect_negative_spikes(signal: np.ndarray, sampling_rate_hz: float,
         raise ValueError("channel and channel_axis apply only to 2D input.")
     if not np.issubdtype(x.dtype, np.number) or x.size == 0 or not np.isfinite(x).all():
         raise ValueError("signal must be a non-empty finite numeric array.")
-    if not np.isfinite(sampling_rate_hz) or sampling_rate_hz <= 0:
-        raise ValueError("sampling_rate_hz must be finite and positive.")
+    if sampling_rate_hz is not None and (
+        not np.isfinite(sampling_rate_hz) or sampling_rate_hz <= 0
+    ):
+        raise ValueError("sampling_rate_hz must be finite and positive or None.")
     if not np.isfinite(threshold_sd) or threshold_sd >= 0:
         raise ValueError("threshold_sd must be finite and negative.")
     x = np.asarray(x, dtype=float)
@@ -39,7 +42,11 @@ def detect_negative_spikes(signal: np.ndarray, sampling_rate_hz: float,
     candidates = np.flatnonzero((x[1:-1] < threshold) &
                                 (x[1:-1] <= x[:-2]) &
                                 (x[1:-1] < x[2:])) + 1
-    times = candidates / float(sampling_rate_hz)
+    times = (
+        candidates / float(sampling_rate_hz)
+        if sampling_rate_hz is not None
+        else None
+    )
     return {"samples": candidates, "times_s": times,
             "amplitudes": x[candidates], "noise_sigma": noise,
             "threshold": threshold, "threshold_sd": threshold_sd}

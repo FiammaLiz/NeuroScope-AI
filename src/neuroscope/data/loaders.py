@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from contextlib import closing
 from pathlib import Path
+
 import numpy as np
 
 
@@ -24,6 +26,8 @@ def load_array(path: str | Path, *, delimiter: str | None = None,
         elif suffix in {".csv", ".txt"}:
             if variable_name is not None:
                 raise DataLoadError("variable_name applies only to .mat files.")
+            if suffix == ".txt" and _text_file_has_no_data(path):
+                raise DataLoadError("TXT file contains no data (empty or whitespace-only).")
             if delimiter is None:
                 if suffix == ".csv": delimiter = ","
                 else: raise DataLoadError("Specify delimiter for .txt (for example '\\t').")
@@ -50,8 +54,55 @@ def load_array(path: str | Path, *, delimiter: str | None = None,
     return array
 
 
+def _text_file_has_no_data(path: Path) -> bool:
+    """Return whether a text file is empty or contains only whitespace."""
+    try:
+        with path.open("r", encoding="utf-8") as stream:
+            return not any(line.strip() for line in stream)
+    except OSError as exc:
+        raise DataLoadError(f"Could not read {path.name}: {exc}") from exc
+
+
 def _load_mat_variable(path: Path, variable_name: str | None) -> np.ndarray:
     """Load one selected numeric classic MAT or v7.3 dataset."""
+    import h5py
+
+    from .hdf5_source import inspect_matlab_v73, is_matlab_v73, open_matlab_v73
+
+    if h5py.is_hdf5(path) and not is_matlab_v73(path):
+        raise DataLoadError(
+            "The .mat file is HDF5-backed but lacks the MATLAB v7.3 MAT-file signature."
+        )
+    if is_matlab_v73(path):
+        candidates = inspect_matlab_v73(path)
+        if not candidates:
+            raise DataLoadError(
+                "No supported numeric MATLAB v7.3 datasets were found. "
+                "Character arrays, cells, structs, and object references are unsupported."
+            )
+        if variable_name is not None:
+            selected = next(
+                (item for item in candidates if item.path == variable_name), None
+            )
+            if selected is None:
+                available = ", ".join(item.path for item in candidates)
+                raise DataLoadError(
+                    f"MAT variable '{variable_name}' is not a supported numeric dataset. "
+                    f"Available: {available}"
+                )
+        elif len(candidates) == 1:
+            selected = candidates[0]
+        else:
+            available = ", ".join(item.path for item in candidates)
+            raise DataLoadError(
+                f"MAT file contains multiple numeric variables ({available}); pass variable_name."
+            )
+        with closing(open_matlab_v73(path, selected.path)) as source:
+            array = source.read_all(
+                channel_axis=0 if len(selected.shape) == 2 else None
+            )
+        return _normalize_mat_vector(array)
+
     try:
         from scipy.io import loadmat
         content = loadmat(path)
@@ -63,21 +114,22 @@ def _load_mat_variable(path: Path, variable_name: str | None) -> np.ndarray:
             raise
         candidates = None
     if candidates is None:
-        try:
-            import h5py
-            with h5py.File(path, "r") as h5:
-                candidates = {k: np.asarray(v) for k, v in h5.items()
-                              if isinstance(v, h5py.Dataset) and v.dtype.kind in "iuf" and v.size}
-        except ImportError as exc:
-            raise DataLoadError("MATLAB v7.3 requires h5py; install the project dependencies.") from exc
-        except Exception as exc:
-            raise DataLoadError("Could not read MAT file. Check it is a supported classic MAT or v7.3 file.") from exc
+        raise DataLoadError(
+            "Could not read MAT file. Check it is a supported classic MAT or MATLAB v7.3 file."
+        )
     if not candidates:
         raise DataLoadError("No supported numeric variable found in MAT file.")
     if variable_name is not None:
         if variable_name not in candidates:
             raise DataLoadError(f"MAT variable '{variable_name}' is not a numeric candidate. Available: {', '.join(candidates)}")
-        return candidates[variable_name]
+        return _normalize_mat_vector(candidates[variable_name])
     if len(candidates) != 1:
         raise DataLoadError(f"MAT file contains multiple numeric variables ({', '.join(candidates)}); pass variable_name.")
-    return next(iter(candidates.values()))
+    return _normalize_mat_vector(next(iter(candidates.values())))
+
+
+def _normalize_mat_vector(array: np.ndarray) -> np.ndarray:
+    """Normalize MATLAB row/column vectors while preserving true matrices."""
+    if array.ndim == 2 and 1 in array.shape:
+        return array.reshape(-1)
+    return array

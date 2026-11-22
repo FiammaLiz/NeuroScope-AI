@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
-from neuroscope.analysis.spikes import estimate_noise_mad, detect_negative_spikes
+
+from neuroscope.analysis.spikes import detect_negative_spikes, estimate_noise_mad
 
 
 def test_mad_noise_estimator_is_positive():
